@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arfaosroot - Unlimited Web Terminal OS</title>
+    <style>
+        :root {
+            --bg: #07090e;
+            --term-bg: rgba(11, 14, 22, 0.96);
+            --cyan: #00e5ff;
+            --purple: #8b5cf6;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+            --text: #e2e8f0;
+            --muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 10%, #171b30, var(--bg) 85%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 8px;
+            color: var(--text);
+        }
+
+        .window {
+            width: 100%;
+            max-width: 980px;
+            height: 95vh;
+            background-color: var(--term-bg);
+            border-radius: 12px;
+            box-shadow: 0 0 35px rgba(0, 229, 255, 0.2), 0 25px 60px rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(0, 229, 255, 0.35);
+        }
+
+        .title-bar {
+            background: #0f121d;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            user-select: none;
+            border-bottom: 1px solid rgba(0, 229, 255, 0.25);
+        }
+
+        .dots { display: flex; gap: 8px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+        .dot-red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+        .dot-yellow { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+        .dot-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+        .title {
+            margin-left: auto;
+            margin-right: auto;
+            font-size: 13px;
+            letter-spacing: 1.5px;
+            color: var(--cyan);
+            font-weight: bold;
+        }
+
+        .terminal {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-size: 13.5px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: center;
+            margin-top: 6px;
+        }
+
+        .prompt {
+            color: var(--cyan);
+            font-weight: bold;
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        .prompt .user { color: var(--green); }
+        .prompt .path { color: var(--purple); }
+
+        input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-family: inherit;
+            font-size: inherit;
+            width: 100%;
+        }
+
+        .cyan { color: var(--cyan); font-weight: bold; }
+        .purple { color: var(--purple); }
+        .green { color: var(--green); }
+        .yellow { color: var(--yellow); }
+        .red { color: var(--red); }
+        .muted { color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">
+        <div class="dots">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+        </div>
+        <span class="title">ARFAOSROOT :: KERNEL TTY1 (SUPERUSER)</span>
+    </div>
+
+    <div class="terminal" id="terminal" onclick="document.getElementById('cmd-input').focus()">
+        <div><span class="cyan">Welcome to arfaosroot (Unlimited Ecosystem Release x86_64)</span></div>
+        <div>Type '<span class="yellow">help</span>' to view all available commands.</div>
+        <br>
+        <div id="history"></div>
+        <div class="input-row">
+            <span class="prompt" id="prompt-label"><span class="user">root</span>@<span class="cyan">arfaosroot</span> <span class="path" id="cur-path">~</span> #</span>
+            <input type="text" id="cmd-input" autofocus autocomplete="off" autocapitalize="none" spellcheck="false">
+        </div>
+    </div>
+</div>
+
+<script>
+    const historyContainer = document.getElementById("history");
+    const input = document.getElementById("cmd-input");
+    const terminal = document.getElementById("terminal");
+    const curPathEl = document.getElementById("cur-path");
+
+    let currentDir = "~";
+    let commandLog = [];
+    let logIdx = -1;
+
+    let packages = [
+        "arfaosroot-core", "arfaosroot-kernel-zen", "arfaosroot-shell", 
+        "hyprland-arfa", "waybar", "neofetch", "gcc", "python3", 
+        "git", "openssh", "curl", "vim", "htop", "bash"
+    ];
+
+    let vfs = {
+        "~": {
+            type: "dir",
+            children: {
+                "projects": {
+                    type: "dir",
+                    children: {
+                        "main.py": { type: "file", content: "print('Hello from Python on arfaosroot!')\nfor i in range(3):\n    print(f'Iteration: {i}')" },
+                        "kernel.c": { type: "file", content: "#include <stdio.h>\nint main() { printf(\"arfaosroot microkernel running\\n\"); return 0; }" }
+                    }
+                },
+                "scripts": {
+                    type: "dir",
+                    children: {
+                        "backup.sh": { type: "file", content: "#!/bin/bash\necho 'Creating BTRFS system snapshot...'" }
+                    }
+                },
+                "notes.txt": { type: "file", content: "arfaosroot: An autonomous, robust, and fast Linux-based distribution." },
+                "storage": { type: "dir", children: {} },
+                "builds": { type: "dir", children: {} }
+            }
+        },
+        "/": {
+            type: "dir",
+            children: {
+                "bin": { type: "dir", children: {} },
+                "etc": { 
+                    type: "dir", 
+                    children: { 
+                        "hostname": { type: "file", content: "arfaosroot" },
+                        "os-release": { type: "file", content: "NAME=arfaosroot\nVERSION=2026.1\nID=arfaosroot\nPRETTY_NAME=\"arfaosroot GNU/Linux\"" }
+                    } 
+                },
+                "root": { type: "dir", children: {} },
+                "usr": { type: "dir", children: {} },
+                "var": { type: "dir", children: {} }
+            }
+        }
+    };
+
+    function getDirObj(path) {
+        if (path === "~") return vfs["~"];
+        if (path === "/") return vfs["/"];
+        let parts = path.split("/").filter(p => p && p !== "~");
+        let cur = path.startsWith("~") ? vfs["~"] : vfs["/"];
+        for (let p of parts) {
+            if (cur.children && cur.children[p]) cur = cur.children[p];
+        }
+        return cur;
+    }
+
+    const arfaLogo = `
+<span class="cyan">                 /\\                 </span><span class="green"><b>root@arfaosroot</b></span>
+<span class="cyan">                /  \\                </span>-------------------
+<span class="cyan">               / /\\ \\               </span><span class="yellow">OS:</span> arfaosroot GNU/Linux x86_64
+<span class="cyan">              / /  \\ \\              </span><span class="yellow">Meaning:</span> Autonomous, Robust, Fast Architecture (Root Privileged)
+<span class="cyan">             / / /\\ \\ \\             </span><span class="yellow">Host:</span> Custom Device Rig (KVM Hypervisor)
+<span class="cyan">            / / /__\\ \\ \\            </span><span class="yellow">Kernel:</span> 6.11.0-arfaosroot-zen+
+<span class="purple">           / / /____\\ \\ \\           </span><span class="yellow">Uptime:</span> 1 hour, 45 mins
+<span class="purple">          /_/ /      \\ \\_\\          </span><span class="yellow">Packages:</span> ${packages.length} (arfa-pkg)
+<span class="purple">         /___/        \\___\\         </span><span class="yellow">Shell:</span> arfaosroot-sh (bash compatible)
+<span class="purple">        /  /            \\  \\        </span><span class="yellow">WM:</span> Hyprland Arfa-Glow
+<span class="purple">       /__/              \\__\\       </span><span class="yellow">Memory:</span> 2480MiB / 16384MiB
+`;
+
+    printHistory(arfaLogo);
+
+    input.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+            const rawVal = input.value.trim();
+            const fullCmd = input.value;
+            input.value = "";
+
+            if (fullCmd.trim()) {
+                commandLog.push(fullCmd);
+                logIdx = commandLog.length;
+            }
+
+            if (!rawVal) {
+                printHistory(`<span class="user">root</span>@<span class="cyan">arfaosroot</span> <span class="path">${currentDir}</span> #`);
+                return;
+            }
+
+            printHistory(`<span class="user">root</span>@<span class="cyan">arfaosroot</span> <span class="path">${currentDir}</span> # ${fullCmd}`);
+            runCommand(rawVal);
+
+            setTimeout(() => {
+                terminal.scrollTop = terminal.scrollHeight;
+            }, 10);
+        } else if (e.key === "ArrowUp") {
+            if (logIdx > 0) {
+                logIdx--;
+                input.value = commandLog[logIdx];
+            }
+        } else if (e.key === "ArrowDown") {
+            if (logIdx < commandLog.length - 1) {
+                logIdx++;
+                input.value = commandLog[logIdx];
+            } else {
+                logIdx = commandLog.length;
+                input.value = "";
+            }
+        }
+    });
+
+    function printHistory(text) {
+        const div = document.createElement("div");
+        div.innerHTML = text;
+        historyContainer.appendChild(div);
+    }
+
+    function runCommand(raw) {
+        let parts = raw.split(" ").filter(p => p.length > 0);
+        let cmd = parts[0].toLowerCase();
+        let args = parts.slice(1);
+
+        if (cmd === "sudo") {
+            if (parts.length > 1) {
+                cmd = parts[1].toLowerCase();
+                args = parts.slice(2);
+            }
+        }
+
+        let folder = getDirObj(currentDir);
+
+        switch (cmd) {
+            case "help":
+                printHistory(`<b>ARFAOSROOT SYSTEM COMMAND ARCHITECTURE:</b>
+------------------------------------------------------------------
+<span class="cyan">PACKAGE MANAGEMENT:</span>
+ - <b>arfa-pkg install &lt;pkg&gt;</b> : Install any package into the system
+ - <b>arfa-pkg remove &lt;pkg&gt;</b>  : Remove a package from the system
+ - <b>arfa-pkg list</b>          : List all installed packages
+ - <b>arfa-pkg search &lt;query&gt;</b> : Query packages from official repositories
+
+<span class="yellow">NAVIGATION & FILE OPERATIONS (VFS):</span>
+ - <b>ls</b> [-la]                 : List directory contents
+ - <b>cd &lt;dir&gt;</b>                 : Change current working directory (cd .., cd ~, cd /)
+ - <b>pwd</b>                      : Print working directory
+ - <b>mkdir &lt;name&gt;</b>             : Create directory
+ - <b>touch &lt;name&gt;</b>             : Create file
+ - <b>nano &lt;file&gt; &lt;text&gt;</b>       : Write content to a file
+ - <b>cat &lt;file&gt;</b>               : Display file contents
+ - <b>rm &lt;file/dir&gt;</b>            : Remove files or directories
+ - <b>echo "text" &gt; &lt;file&gt;</b>     : Redirect text output to file
+
+<span class="green">PROGRAMMING & EXECUTION:</span>
+ - <b>python -c "&lt;code&gt;"</b>       : Execute inline Python statements
+ - <b>python &lt;file.py&gt;</b>         : Execute Python script file
+ - <b>calc &lt;expression&gt;</b>        : Mathematical expression evaluator
+
+<span class="purple">SYSTEM & HARDWARE MONITORING:</span>
+ - <b>neofetch / fastfetch</b>      : Display system banner and specs
+ - <b>about</b>                     : Display arfaosroot design philosophy
+ - <b>top / ps</b>                  : Display running processes and system load
+ - <b>free -h</b>                   : Show memory allocation and swap usage
+ - <b>df -h</b>                     : Disk space usage on mounted partitions
+ - <b>uname -a</b>                  : Print custom zen kernel details
+ - <b>whoami / id</b>               : Verify superuser authority
+ - <b>uptime</b>                    : Show system operational duration
+ - <b>date / cal</b>                : Current date and calendar display
+
+<span class="cyan">NETWORK & UTILITIES:</span>
+ - <b>ping &lt;host&gt;</b>              : Test host network latency
+ - <b>curl &lt;url&gt;</b>               : Transfer data from URL
+ - <b>history</b>                  : Show command history log
+ - <b>clear</b>                    : Clear terminal screen buffer`);
+                break;
+
+            case "about":
+                printHistory(`<b>ARFAOSROOT DESIGN PHILOSOPHY:</b>
+ - <b>A (Autonomous)</b> : Operates independently with modular dependencies.
+ - <b>R (Robust)</b>     : Resilient system architecture with automated recovery.
+ - <b>F (Fast)</b>       : Highly tuned for minimal latency and responsive execution.
+ - <b>A (Architecture)</b>: Modern system framework built on Linux Zen.
+ - <b>ROOT</b>           : Unrestricted superuser access to container subsystems.`);
+                break;
+
+            case "neofetch":
+            case "fastfetch":
+                printHistory(arfaLogo);
+                break;
+
+            case "clear":
+                historyContainer.innerHTML = "";
+                break;
+
+            case "whoami":
+                printHistory("root (full superuser access)");
+                break;
+
+            case "id":
+                printHistory("uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),10(wheel)");
+                break;
+
+            case "pwd":
+                printHistory(currentDir === "~" ? "/root" : currentDir);
+                break;
+
+            case "uname":
+                printHistory(args.includes("-a") 
+                    ? "Linux arfaosroot 6.11.0-arfaosroot-zen+ #1 PREEMPT_DYNAMIC SMP x86_64 GNU/Linux"
+                    : "Linux");
+                break;
+
+            case "uptime":
+                printHistory(" 19:37:05 up 1:45,  1 user,  load average: 0.08, 0.04, 0.01");
+                break;
+
+            case "date":
+                printHistory(new Date().toString());
+                break;
+
+            case "cal":
+                printHistory(`    October 2026   
+Su Mo Tu We Th Fr Sa
+             1  2  3
+ 4  5  6  7  8  9 10
+11 12 13 14 15 16 17
+18 19 20 21 22 23 24
+25 26 27 28 29 30 31`);
+                break;
+
+            case "free":
+                printHistory(`               total        used        free      shared  buff/cache   available
+Mem:           16384        2480       11240         128        2664       13776
+Swap:           4096           0        4096`);
+                break;
+
+            case "df":
+                printHistory(`Filesystem      Size  Used Avail Use% Mounted on
+/dev/arfa-nvme  128G   24G   98G  20% /
+/dev/btrfs-data 500G  110G  390G  22% /home
+tmpfs           8.0G     0  8.0G   0% /dev/shm`);
+                break;
+
+            case "top":
+            case "ps":
+                printHistory(`  PID USER      PR  NI    VIRT    RES  %CPU  %MEM     TIME+ COMMAND
+    1 root      20   0  168400  11280   0.0   0.1   0:01.12 systemd
+  120 root      20   0   42100   6400   0.1   0.0   0:00.34 arfa-daemon
+  410 root      20   0  789400  98120   1.2   0.6   1:12.80 hyprland
+  850 root      20   0   14320   3910   0.0   0.0   0:00.02 arfaosroot-sh`);
+                break;
+
+            case "ls":
+                if (!folder.children || Object.keys(folder.children).length === 0) {
+                    printHistory("<span class='yellow'>(empty directory)</span>");
+                } else {
+                    let items = Object.keys(folder.children).map(name => {
+                        let item = folder.children[name];
+                        return item.type === "dir" ? `<span class="cyan">${name}/</span>` : `<span>${name}</span>`;
+                    });
+                    printHistory(items.join("  "));
+                }
+                break;
+
+            case "cd":
+                let tgt = args[0] || "~";
+                if (tgt === "~") {
+                    currentDir = "~";
+                } else if (tgt === "/") {
+                    currentDir = "/";
+                } else if (tgt === "..") {
+                    if (currentDir.includes("/")) {
+                        let p = currentDir.split("/").filter(Boolean);
+                        p.pop();
+                        currentDir = p.length > 0 ? (currentDir.startsWith("~") ? "~/" + p.slice(1).join("/") : "/" + p.join("/")) : (currentDir.startsWith("~") ? "~" : "/");
+                        if (!currentDir) currentDir = "/";
+                    } else {
+                        currentDir = "/";
+                    }
+                } else if (folder.children && folder.children[tgt]) {
+                    if (folder.children[tgt].type === "dir") {
+                        currentDir = (currentDir === "/" ? "" : currentDir) + "/" + tgt;
+                    } else {
+                        printHistory(`<span class="red">arfaosroot-sh: cd: ${tgt}: Not a directory</span>`);
+                    }
+                } else {
+                    printHistory(`<span class="red">arfaosroot-sh: cd: ${tgt}: No such file or directory</span>`);
+                }
+                curPathEl.innerText = currentDir;
+                break;
+
+            case "mkdir":
+                if (!args[0]) {
+                    printHistory("<span class='red'>mkdir: missing operand</span>");
+                } else {
+                    folder.children[args[0]] = { type: "dir", children: {} };
+                    printHistory(`<span class="green">✔ Directory '${args[0]}' created successfully.</span>`);
+                }
+                break;
+
+            case "touch":
+                if (!args[0]) {
+                    printHistory("<span class='red'>touch: missing file operand</span>");
+                } else {
+                    folder.children[args[0]] = { type: "file", content: "" };
+                    printHistory(`<span class="green">✔ File '${args[0]}' created successfully.</span>`);
+                }
+                break;
+
+            case "nano":
+                if (!args[0]) {
+                    printHistory("<span class='yellow'>Usage: nano &lt;file_name&gt; &lt;file_content&gt;</span>");
+                } else {
+                    let fname = args[0];
+                    let content = args.slice(1).join(" ");
+                    folder.children[fname] = { type: "file", content: content };
+                    printHistory(`<span class="green">✔ File '${fname}' saved with contents:</span>\n${content}`);
+                }
+                break;
+
+            case "cat":
+                if (!args[0]) {
+                    printHistory("<span class='red'>cat: missing operand</span>");
+                } else if (folder.children && folder.children[args[0]]) {
+                    if (folder.children[args[0]].type === "file") {
+                        printHistory(folder.children[args[0]].content || "<span class='muted'>(empty file)</span>");
+                    } else {
+                        printHistory(`<span class="red">cat: ${args[0]}: Is a directory</span>`);
+                    }
+                } else {
+                    printHistory(`<span class="red">cat: ${args[0]}: No such file or directory</span>`);
+                }
+                break;
+
+            case "rm":
+                if (!args[0]) {
+                    printHistory("<span class='red'>rm: missing operand</span>");
+                } else if (folder.children && folder.children[args[0]]) {
+                    delete folder.children[args[0]];
+                    printHistory(`<span class="yellow">✔ '${args[0]}' has been deleted.</span>`);
+                } else {
+                    printHistory(`<span class="red">rm: cannot remove '${args[0]}': No such file or directory</span>`);
+                }
+                break;
+
+            case "echo":
+                let echoStr = raw.substring(raw.indexOf(" ") + 1);
+                if (echoStr.includes(">")) {
+                    let p = echoStr.split(">");
+                    let txt = p[0].trim().replace(/^["']|["']$/g, '');
+                    let file = p[1].trim();
+                    if (file) {
+                        folder.children[file] = { type: "file", content: txt };
+                        printHistory(`<span class="green">✔ Content written to '${file}'</span>`);
+                    }
+                } else {
+                    printHistory(echoStr.replace(/^["']|["']$/g, ''));
+                }
+                break;
+
+            case "calc":
+                if (!args[0]) {
+                    printHistory("<span class='yellow'>Usage: calc &lt;math_expression&gt; (example: calc 25*4+100)</span>");
+                } else {
+                    try {
+                        let exp = args.join("");
+                        let res = Function('"use strict";return (' + exp + ')')();
+                        printHistory(`<span class="cyan">Result: ${exp} = <b>${res}</b></span>`);
+                    } catch(e) {
+                        printHistory("<span class='red'>Error: Invalid mathematical expression.</span>");
+                    }
+                }
+                break;
+
+            case "python":
+            case "python3":
+                handlePython(args, folder);
+                break;
+
+            case "ping":
+                let targetHost = args[0] || "1.1.1.1";
+                printHistory(`PING ${targetHost} (56 data bytes)
+64 bytes from ${targetHost}: icmp_seq=1 ttl=118 time=14.2 ms
+64 bytes from ${targetHost}: icmp_seq=2 ttl=118 time=13.8 ms
+--- ${targetHost} ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss`);
+                break;
+
+            case "curl":
+                let url = args[0] || "https://arfaosroot.internal";
+                printHistory(`HTTP/2 200 OK\nserver: arfa-web-engine\ncontent-type: text/plain\n\nConnected to host: ${url}`);
+                break;
+
+            case "history":
+                printHistory(commandLog.map((c, i) => `  ${i + 1}  ${c}`).join("\n"));
+                break;
+
+            case "arfa-pkg":
+                handlePkg(args);
+                break;
+
+            default:
+                handleDynamicCommand(cmd, args);
+                break;
+        }
+    }
+
+    function handlePython(args, folder) {
+        if (!args[0]) {
+            printHistory("Python 3.12.3 (arfaosroot-build)\nType python -c \"code\" or python &lt;filename.py&gt;");
+            return;
+        }
+
+        if (args[0] === "-c") {
+            let code = args.slice(1).join(" ").replace(/^["']|["']$/g, '');
+            try {
+                let output = [];
+                let customLog = function(...m) { output.push(m.join(" ")); };
+                let jsCode = code.replace(/print\((.*?)\)/g, 'customLog($1)');
+                let run = new Function('customLog', jsCode);
+                run(customLog);
+                printHistory(output.join("\n") || "<span class='muted'>(process terminated with no output)</span>");
+            } catch(e) {
+                printHistory(`<span class='red'>Traceback (most recent call last):\n  File "&lt;string&gt;", line 1\nSyntaxError: ${e.message}</span>`);
+            }
+        } else {
+            let file = args[0];
+            if (folder.children && folder.children[file]) {
+                printHistory(`[Running ${file} in arfaosroot Python runtime]\n${folder.children[file].content}`);
+            } else {
+                printHistory(`<span class='red'>python: can't open file '${file}': No such file</span>`);
+            }
+        }
+    }
+
+    function handlePkg(args) {
+        if (!args[0]) {
+            printHistory("<span class='yellow'>Usage: arfa-pkg [install|remove|list|search] &lt;package_name&gt;</span>");
+            return;
+        }
+
+        const action = args[0].toLowerCase();
+        const target = args[1];
+
+        if (action === "install") {
+            if (!target) {
+                printHistory("<span class='red'>error: specify the package name to install.</span>");
+                return;
+            }
+            if (packages.includes(target)) {
+                printHistory(`<span class='yellow'>warning: ${target} is already up to date.</span>`);
+            } else {
+                packages.push(target);
+                printHistory(`:: Fetching package binary from arfaosroot-repo/main...\n:: Verifying release-key signature...\n(1/1) Installing [${target}] [####################] 100%\n<span class="green">✔ Success: ${target} installed successfully.</span>`);
+            }
+        } else if (action === "remove") {
+            if (!target) {
+                printHistory("<span class='red'>error: specify the package name to remove.</span>");
+                return;
+            }
+            let idx = packages.indexOf(target);
+            if (idx !== -1) {
+                packages.splice(idx, 1);
+                printHistory(`<span class="yellow">✔ Package '${target}' removed successfully.</span>`);
+            } else {
+                printHistory(`<span class="red">error: package '${target}' not found.</span>`);
+            }
+        } else if (action === "list") {
+            printHistory("<b>Installed packages on arfaosroot:</b>\n" + packages.map(p => ` - <span class="cyan">${p}</span>`).join("\n"));
+        } else if (action === "search") {
+            printHistory(`Search results for '${target || "*"}': Found official arfaosroot repository with 12,000+ packages available.`);
+        } else {
+            printHistory(`<span class='red'>arfa-pkg: unrecognized option '${args[0]}'</span>`);
+        }
+    }
+
+    function handleDynamicCommand(cmd, args) {
+        if (packages.includes(cmd)) {
+            printHistory(`[Executing ${cmd} binary]\n${cmd}: Process started with PID ${Math.floor(Math.random() * 8000 + 1000)}.`);
+        } else {
+            printHistory(`<span class="red">arfaosroot-sh: ${cmd}: command not found.</span>\nType '<span class="yellow">help</span>' for a list of commands, or install it using '<span class="cyan">arfa-pkg install ${cmd}</span>'.`);
+        }
+    }
+</script>
+</body>
+</html>
